@@ -20,12 +20,14 @@ use File::Spec;
 use autodie;
 
 # Обязатетельыне аргументы передаваемы при запуске
-# пароль root для sudo 
+# ?пароль root для sudo 
 # желаемый каталог в кторый склонируется проект, без HOME! либо прдётся чистить...
 # пользователь git
 # пароль для git
 #
-my $usage = "Usage: install.pl rootpasswd path/to/project gituser gitpasswd ....";
+my $usage = q(Usage: 
+	sudo install.pl rootpasswd path/to/project gituser gitpasswd 
+	...);
 
 die $usage
 	if (4 > @ARGV);
@@ -40,36 +42,46 @@ chomp $user;
 print ">>> user: " . $user . "\n";
 # получить домашний каталог
 # $HOME
-print ">>> home directory: " . $ENV{HOME} . "\n";
+my $home_dir = $ENV{HOME};
+print ">>> home directory: " . $home_dir . "\n";
 # подготовить структуру каталогов?
 # $HOME/code/cargo
 # это путь потом надо будет в конфигах nginx использовать как параметр корня
-
+my $default_cargo_root = File::Spec->catfile("code", "cargo");
 # подготовить шаблоны файлов для замены, прям суда их запихнуть чтоб не терялись...
-print ">>>" . " default directory: $ENV{HOME}/code" . "\n";
+my $cargo_root = $ARGV[4] || $default_cargo_root;
+my $full_path_to_root = File::Spec->catfile($home_dir, $cargo_root);
+print ">>> " . "cargo root directory: " . $full_path_to_root . "\n";
 
 #** ------------------------------------------------------------------
 #** Подготовка среды для развёртывания сервиса
 #** ------------------------------------------------------------------
-
+#
+# может повынести в вотдельные процессы? 
+#	sup(install.pl) fork -> 
+#		[worker1 "apt-get install git
+#		[worker2 "apt-get install nginx]
+#		[worker3 "apt-get intall node] 
+#		and so on...
+# 
+#
 #0. Клон проекта через HTTP
 #пока заведено что проект расположен по такому пути /home/user/code/ user инменно user никаких фривольностей :)
 #git clone http://code.tvzavr.ru/cargo/cargo.git
 # тут надо проверить наличие гитика, если его нет то установить
-#git --version
-#print ">>> " . `git --version` . "\n";
 my $git_res = `git --version`;
 chomp $git_res;
-print " * " . "$git_res" . "\n";
-#git version 2.7.4
-print ">>> sudo apt install git\n"
+print " * " . "$git_res" . "\n"
+	if ($git_res ne "");
+print ">>> syste(\"apt-get install -y git\")\n"
 	if ($git_res eq "");
 # проверить установку 
 $git_res = `git --version`;
 chomp $git_res;
-print ">>> " . "[ ok ] git installed!\n"
+print ">>> " . "$git_res" . "\n";
+print ">>> " . "[ ok ] git is installed!\n"
 	if ($git_res ne "");
-print ">>> clonnig directory: " . "git clone http://code.tvzavr.ru/cargo/cargo.git " . $ENV{HOME} . "/code" . "\n";
+print ">>> clonnig directory: " . "git clone http://code.tvzavr.ru/cargo/cargo.git " . $full_path_to_root . "\n";
 #после установки должно получится так:
 #/home/user/code/cargo 
 #это будет корень(root) проекта
@@ -79,17 +91,20 @@ print ">>> clonnig directory: " . "git clone http://code.tvzavr.ru/cargo/cargo.g
 #chicagoboss уже там вмонтажен. его не надо искать
 
 #1. Установка nginx
-# проверить не установлени ли? что-то типа nginx --version
-print ">>> " . `nginx --version` . "\n";
-my $nginx_res = `nginx --version`;
-print " * " . "$nginx_res". "\n"
-	if ($nginx_res eq "");
+# проверить не установлени ли? что-то типа nginx -v
+my $nginx_res = `nginx -v 2>&1` ||  "";
+chomp $nginx_res;
+print " * " . "$nginx_res". "\n";
 #даём команду на установку
 #sudo apt install nginx
-print ">>> sudo apt install nginx\n"
+print ">>> ". "system(\"apt-get install -y nginx\")"
 	if ($nginx_res eq "");
 # проверить устанвоку
-print ">>> " . `nginx --version` . "\n";
+$nginx_res =  `nginx -v 2>&1`;
+chomp $nginx_res;
+print ">>> " . "$nginx_res" . "\n";
+print ">>> " . "[ ok ] nginx is installed!\n"
+	if ($nginx_res ne "");
 #затем надо заменить файл
 #(я перед заменой сделал cp nginx.conf nginx.conf.bac :)
 #/ect/nginx/nginx.conf на наш nginx.conf 
@@ -102,10 +117,10 @@ print ">>> configureing nginx...\n";
 
 #nginx надо запустить или перезапустить
 #sudo service nginx restart
-print ">>> sudo service nginx restart\n";
+print ">>> system(\"service nginx restart\")\n";
 #и проверить запущен ли он(не возникло ли ошибок в ходе запуска) 
 #sudo service nginx status
-print ">>> sudo service nginx status\n";
+print ">>> \$nginx_res = \`\"service nginx status\"\`\n";
 #если всё хорошо, то появится приблизительно следующее:
 #Контролить зелёненький :)
 #● nginx.service - A high performance web server and a reverse proxy server
@@ -126,6 +141,8 @@ print ">>> sudo service nginx status\n";
 # проверям не установлена ли нода node -v
 #8.
 print ">>> " . `node -v` . "\n";
+my $node_res = `node -v`;
+chomp $node_res;
 # првоверяем не установлен ли манагер пакетный npm-v
 print ">>> " . `npm -v` . "\n";
 #6..@...
@@ -135,13 +152,16 @@ print ">>> " . `npm -v` . "\n";
 
 #[opt] если его нету то надо поставить перед установкой
 #curl -v если нету то надо его ставить
-print ">>> " . `curl --version` . "\n";
+my $curl_res = `curl --version`;
+chomp $curl_res;
 #sudo apt install curl
-print ">>> " . "sudo apt install curl" . "\n";
+print ">>> " . "system(\"sudo apt-get install -y curl\")\n";
+# подготовим пакет нужной версии (сейчас на март 2018 это версия 8 для ноды
 #curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
-print ">>> " . "curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -\n";
+print ">>> " . "system(\"curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -\")\n";
+# установим саму ноду
 #sudo apt-get install -y nodejs
-print ">>> " . "sudo apt-get install -y nodejs\n";
+print ">>> " . "system(\"sudo apt-get install -y nodejs\")\n";
 
 #3. Установка erlang 19
 #зависимости не дали мне с ходу поставить эту версию(19.2.3)
@@ -157,8 +177,8 @@ print ">>> " . "sudo apt-get install -y nodejs\n";
 #ставим зависимости(надеюсь не придётся их парсить и обрабатывать...)
 #sudo apt install libsctp1
 #sudo apt install libwxbase3.0-0v5 libwxgtk3.0-0v5
-print ">>> " . "sudo apt install libsctp1\n";
-print ">>> " . "sudo apt install libwxbase3.0-0v5 libwxgtk3.0-0v5\n";
+print ">>> " . "system(\"apt-get install -y libsctp1\")\n";
+print ">>> " . "system(\"apt-get install -y libwxbase3.0-0v5 libwxgtk3.0-0v5\")\n";
 #затем скачиваем erlang c https://www.erlang-solutions.com/resources/download.html
 #(там внизу в табличке надо выбрать подходящую версию пакета)
 # тут если не прокатит оффициальная версия прдётся выбирать версию по ОС
@@ -210,24 +230,39 @@ print ">>> " . "npm install\n";
 
 #установить gulp, дав следующую команду
 # проверить наличие (уточнить не --vesrsion ли???
-print ">>> " . `gulp -v` . "\n";
+my $gulp_res = `gulp -v` || "";
+chomp $gulp_res;
 # его скорей всего не будет, поэтому 
 #sudo npm i -g gulp вот так её надо установить
-print ">>> " . "sudo npm i -g gulp\n";
+print ">>> " . "system(\"npm i -g gulp\")\n";
 #и дать в консоли команду
 # надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
 #gulp
 #по окончании подать сигнал
 #ctrl+’c’
+defined (my $gulp_pid = fork) 
+	or die "Cannot fork: $!";
+unless ($gulp_pid) {
+	# и дать в консоли команду
+	# надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
+	print "<gulp." . $gulp_pid . "> >>> " . "system(\"cd $full_path_to_root\")\n";
+	print "<gulp." . $gulp_pid . "> >>> " . "system(\"gulp\")\n";
+	#по окончании подать сигнал
+	#ctrl+’c’ просто прибить процесс по окончании основного процесса и всё... 
+}
+# parent
 
 #скачать зависимости
 #./rebar get-deps
-print ">>> " . "./rebar get-deps\n";
+print ">>> " . "system(\"./rebar get-deps\")\n";
 #скомпилировать зависимости
 #./rebar compile
-print ">>> " . "./rebar compile\n";
+print ">>> " . "system(\"./rebar compile\")\n";
 
-print ">>> " . "DONE :)\n";
+print ">>> " . "  *** DONE :) ***\n";
+# завершить проецсс с gulp'ом
+kill 0, $gulp_pid
+	or die "Cannot signal $gulp_pid whith SIGINT: $!";
 #запуск сервера
 #./init-dev.sh 
 
@@ -238,17 +273,38 @@ print ">>> " . "DONE :)\n";
 #  },
 #то запуск через команду
 #npm run start
-my $passwd = "111111111";
-my $cmd = "echo $passwd | sudo -S fdisk -l";
-my $res = `$cmd`;
-print " ---- " . "$res" . "\n";
 
-my $cmd1 = "echo $passwd | sudo -S service networking status";
-my $res1 = `$cmd1`;
-print " --- " . "$res1" . "\n";
-if ($res1 =~ m/Active: active .exited./gim) {
-	print ">>> " . "[ ok ] running...\n";
-}
+
+# -----------------------------------------------------------
+# разинца запуск с sudo и с паролем
+# какой вариант выбрать?
+#print " &&&& " . `fdisk -l` . "\n";
+#my $passwd = "111111111";
+#my $cmd = "echo $passwd | sudo -S fdisk -l";
+#my $res = `$cmd`;
+#print " ---- " . "$res" . "\n";
+
+#my $cmd1 = "echo $passwd | sudo -S service networking status";
+#my $res1 = `$cmd1`;
+#print " --- " . "$res1" . "\n";
+#if ($res1 =~ m/Active: active .exited./gim) {
+#	print ">>> " . "[ ok ] running...\n";
+#}
+# ----------------------------------------------------------
+
+# 
+#system("ls -l");
+#exec("ls -l");
+
+#defined (my $pid = fork)
+#	of die "Cannot fork: $!";
+#unless ($pid) {
+	# child prcess
+#}
+# parent
+
+
+
 #После чего, перейти по ссылке: http://localhost
 
 #Должна появиться страница следующего содержания:
