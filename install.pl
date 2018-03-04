@@ -35,7 +35,9 @@ print ">>> agrgumers: @ARGV" . "\n";
 
 # понять кто я
 # whoame
-print ">>> user: " . `whoami` . "\n";
+my $user = `whoami`;
+chomp $user;
+print ">>> user: " . $user . "\n";
 # получить домашний каталог
 # $HOME
 print ">>> home directory: " . $ENV{HOME} . "\n";
@@ -55,11 +57,18 @@ print ">>>" . " default directory: $ENV{HOME}/code" . "\n";
 #git clone http://code.tvzavr.ru/cargo/cargo.git
 # тут надо проверить наличие гитика, если его нет то установить
 #git --version
-print ">>> " . `git --version` . "\n";
+#print ">>> " . `git --version` . "\n";
 my $git_res = `git --version`;
+chomp $git_res;
 print " * " . "$git_res" . "\n";
-
 #git version 2.7.4
+print ">>> sudo apt install git\n"
+	if ($git_res eq "");
+# проверить установку 
+$git_res = `git --version`;
+chomp $git_res;
+print ">>> " . "[ ok ] git installed!\n"
+	if ($git_res ne "");
 print ">>> clonnig directory: " . "git clone http://code.tvzavr.ru/cargo/cargo.git " . $ENV{HOME} . "/code" . "\n";
 #после установки должно получится так:
 #/home/user/code/cargo 
@@ -79,6 +88,8 @@ print " * " . "$nginx_res". "\n"
 #sudo apt install nginx
 print ">>> sudo apt install nginx\n"
 	if ($nginx_res eq "");
+# проверить устанвоку
+print ">>> " . `nginx --version` . "\n";
 #затем надо заменить файл
 #(я перед заменой сделал cp nginx.conf nginx.conf.bac :)
 #/ect/nginx/nginx.conf на наш nginx.conf 
@@ -227,8 +238,17 @@ print ">>> " . "DONE :)\n";
 #  },
 #то запуск через команду
 #npm run start
+my $passwd = "111111111";
+my $cmd = "echo $passwd | sudo -S fdisk -l";
+my $res = `$cmd`;
+print " ---- " . "$res" . "\n";
 
-
+my $cmd1 = "echo $passwd | sudo -S service networking status";
+my $res1 = `$cmd1`;
+print " --- " . "$res1" . "\n";
+if ($res1 =~ m/Active: active .exited./gim) {
+	print ">>> " . "[ ok ] running...\n";
+}
 #После чего, перейти по ссылке: http://localhost
 
 #Должна появиться страница следующего содержания:
