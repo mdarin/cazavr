@@ -177,7 +177,7 @@ close FIN
 close FOUT
 	or die "Cannot close $nginx_conf_target_fname:$!";
 #сделать резервную копию существующего файла если он есть
-system("echo $passwd | sudo -S cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak");
+system("echo $passwd | sudo -S mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak");
 #перемесить сгенерированный кофиг в каталог /etc/nginx
 system("echo $passwd | sudo -S mv $nginx_conf_target_fname /etc/nginx");
 
@@ -194,7 +194,7 @@ map { chomp;
 	# TODO: здесь вставить правила преобразования
 	if (s/\$\{port\}/$port/) {
 		print FOUT "$_\n";
-	} elsif (s/\$\{cargo_root\}/$cargo_root/) {
+	} elsif (s/\$\{cargo_root\}/$full_path_to_root/) {
 		print FOUT "$_\n";
 	} else {
 		print FOUT "$_\n";
