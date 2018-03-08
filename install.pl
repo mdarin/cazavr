@@ -24,7 +24,8 @@ use autodie;
 # желаемый каталог в кторый склонируется проект, без HOME! либо прдётся чистить...
 # пользователь git
 # пароль для git
-#
+# имя сервера
+# порт на котором будет дотупен сайт
 my $usage = q(Usage: 
 	sudo install.pl rootpasswd path/to/project gituser gitpasswd 
 	...);
@@ -40,6 +41,8 @@ print ">>> agrgumers: @ARGV" . "\n";
 my $user = `whoami`;
 chomp $user;
 print ">>> user: " . $user . "\n";
+die "	You shoul be a root or run with sudo!"
+	if ($user ne "root");
 # получить домашний каталог
 # $HOME
 my $home_dir = $ENV{HOME};
@@ -53,56 +56,56 @@ my $cargo_root = $ARGV[4] || $default_cargo_root;
 my $full_path_to_root = File::Spec->catfile($home_dir, $cargo_root);
 print ">>> " . "cargo root directory: " . $full_path_to_root . "\n";
 
-#** ------------------------------------------------------------------
-#** Подготовка среды для развёртывания сервиса
-#** ------------------------------------------------------------------
-#
-# может повынести в вотдельные процессы? 
 #	sup(install.pl) fork -> 
 #		[worker1 "apt-get install git
 #		[worker2 "apt-get install nginx]
 #		[worker3 "apt-get intall node] 
 #		and so on...
-# 
-#
+
 #0. Клон проекта через HTTP
 #пока заведено что проект расположен по такому пути /home/user/code/ user инменно user никаких фривольностей :)
 #git clone http://code.tvzavr.ru/cargo/cargo.git
 # тут надо проверить наличие гитика, если его нет то установить
-my $git_res = `git --version`;
+my $git_res = `git --version` || "";
 chomp $git_res;
 print " * " . "$git_res" . "\n"
 	if ($git_res ne "");
-print ">>> syste(\"apt-get install -y git\")\n"
+#print ">>> 
+system("apt-get install -y git")#\n"
 	if ($git_res eq "");
 # проверить установку 
 $git_res = `git --version`;
 chomp $git_res;
-print ">>> " . "$git_res" . "\n";
 print ">>> " . "[ ok ] git is installed!\n"
 	if ($git_res ne "");
-print ">>> clonnig directory: " . "git clone http://code.tvzavr.ru/cargo/cargo.git " . $full_path_to_root . "\n";
+print ">>> clonnig cargo to your root directory: " . $full_path_to_root . "\n";
 #после установки должно получится так:
 #/home/user/code/cargo 
 #это будет корень(root) проекта
-
+# TODO: тут надо удалять каталог если он есть и содержимое в мём перед клонироваем
+# и создавать если всего этого нету...
 #всё это не железно и гвоздями не приколочено, просто настройка конфигов в ручную(пока) это потеря времени и лишняя головная боль
-
+# клонируем прект cargo по указанному пути
+# TODO: тут надо пользователя же вводить!!
+#print ">>> " . "
+system("git clone http://code.tvzavr.ru/cargo/cargo.git $full_path_to_root");# . "\n";
+#
 #chicagoboss уже там вмонтажен. его не надо искать
 
 #1. Установка nginx
 # проверить не установлени ли? что-то типа nginx -v
 my $nginx_res = `nginx -v 2>&1` ||  "";
 chomp $nginx_res;
-print " * " . "$nginx_res". "\n";
+print " * " . "$nginx_res". "\n"
+	if ($nginx_res ne "");
 #даём команду на установку
 #sudo apt install nginx
-print ">>> ". "system(\"apt-get install -y nginx\")"
+#print ">>> ". "
+system("apt-get install -y nginx")#\n"
 	if ($nginx_res eq "");
 # проверить устанвоку
-$nginx_res =  `nginx -v 2>&1`;
+$nginx_res =  `nginx -v 2>&1` || "";
 chomp $nginx_res;
-print ">>> " . "$nginx_res" . "\n";
 print ">>> " . "[ ok ] nginx is installed!\n"
 	if ($nginx_res ne "");
 #затем надо заменить файл
@@ -117,10 +120,15 @@ print ">>> configureing nginx...\n";
 
 #nginx надо запустить или перезапустить
 #sudo service nginx restart
-print ">>> system(\"service nginx restart\")\n";
+#print ">>> 
+system("service nginx restart");#\n";
 #и проверить запущен ли он(не возникло ли ошибок в ходе запуска) 
 #sudo service nginx status
-print ">>> \$nginx_res = \`\"service nginx status\"\`\n";
+#print ">>> \
+$nginx_res = `service nginx status`;#\n";
+if ($nginx_res =~ /Active:\s*active/gim) {
+	print ">>> " . "[ ok ] nginx is running...\n";
+}
 #если всё хорошо, то появится приблизительно следующее:
 #Контролить зелёненький :)
 #● nginx.service - A high performance web server and a reverse proxy server
@@ -140,28 +148,54 @@ print ">>> \$nginx_res = \`\"service nginx status\"\`\n";
 #2. Установка nodejs и npm
 # проверям не установлена ли нода node -v
 #8.
-print ">>> " . `node -v` . "\n";
-my $node_res = `node -v`;
-chomp $node_res;
-# првоверяем не установлен ли манагер пакетный npm-v
-print ">>> " . `npm -v` . "\n";
-#6..@...
 #вот тут срослось
 #https://nodejs.org/en/download/package-manager/#debian-and-ubuntu-based-linux-distributions
 
-
 #[opt] если его нету то надо поставить перед установкой
 #curl -v если нету то надо его ставить
-my $curl_res = `curl --version`;
+my $curl_res = `curl --version` || "";
 chomp $curl_res;
+print " * " . "$curl_res" . "\n"
+	if ($curl_res ne "");
 #sudo apt install curl
-print ">>> " . "system(\"sudo apt-get install -y curl\")\n";
-# подготовим пакет нужной версии (сейчас на март 2018 это версия 8 для ноды
-#curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
-print ">>> " . "system(\"curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -\")\n";
-# установим саму ноду
-#sudo apt-get install -y nodejs
-print ">>> " . "system(\"sudo apt-get install -y nodejs\")\n";
+#print ">>> " . "
+system("sudo apt-get install -y curl")#\n"
+	if ($curl_res eq "");
+# проверим установку
+$curl_res = `curl --version` || "";
+chomp $curl_res;
+print ">>> " . "[ ok ] curl is installed!\n"
+	if ($curl_res ne "");
+# проверяем не установлена ли нода(кстати если установлена и не та, её надо бы снести и так со всем...)
+my $node_res = `node -v` || "";
+chomp $node_res;
+print " * " . "node $node_res" . "\n"
+	if ($node_res ne "");
+# првоверяем не установлен ли манагер пакетный npm-v
+my $npm_res = `npm -v` || "";
+chomp $npm_res;
+print " * " . "npm $npm_res" . "\n"
+	if ($npm_res ne "");
+#6..@... 
+if ($node_res eq "") {
+	# подготовим пакет нужной версии (сейчас на март 2018 это версия 8 для ноды
+	#curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+	#print ">>> " . "
+	system("curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -");#\n";
+	# установим саму ноду
+	#sudo apt-get install -y nodejs
+	#print ">>> " . "
+	system("sudo apt-get install -y nodejs");#\n";
+}
+$node_res = `node -v` || "";
+chomp $node_res;
+print ">>> " . "[ ok ] node is installed!\n"
+	if ($node_res ne "");
+# првоверяем не установлен ли манагер пакетный npm-v
+$npm_res = `npm -v` || "";
+chomp $npm_res;
+print ">>> " . "[ ok ] npm is installed!\n"
+	if ($npm_res ne "");
 
 #3. Установка erlang 19
 #зависимости не дали мне с ходу поставить эту версию(19.2.3)
@@ -194,6 +228,7 @@ print ">>> " . `lsb_release -a` . "\n";
 #esl-erlang_18.3.4-1~ubuntu~xenial_amd64.deb  esl-erlang_20.2.2-1~ubuntu~xenial_amd64.deb
 #esl-erlang_19.3.6-1~ubuntu~xenial_amd64.deb
 print ">>> cd " . "$ENV{HOME}/Downloads\n";
+#chdir $full_path_to_root;
 #теперь устанавливаем, здесь при помощи dpkg
 #(я хочу попробовать версию 20.2.2 потому пока в примере будет такая)
 #dpkg -i esl-erlang_20.2.2-1~ubuntu~xenial_amd64.deb
@@ -218,9 +253,11 @@ print ">>> " . "generating boss.conf file...\n";
 #Перейти в корень проекта
 #cd /paht/to/project/rootdir/cargo
 print ">>> " . "cd $ENV{HOME}/code/cargo\n";
+chdir $full_path_to_root;
 #и последовательно выполнить команды
 #npm install
-print ">>> " . "npm install\n";
+#print ">>> " . "
+system("npm install");#\n";
 #...подождать выполнения...
 
 #У меня warn'ы
@@ -232,9 +269,12 @@ print ">>> " . "npm install\n";
 # проверить наличие (уточнить не --vesrsion ли???
 my $gulp_res = `gulp -v` || "";
 chomp $gulp_res;
+print " * " . "$gulp_res" . "\n"
+	if ($gulp_res ne "");
 # его скорей всего не будет, поэтому 
 #sudo npm i -g gulp вот так её надо установить
-print ">>> " . "system(\"npm i -g gulp\")\n";
+#print ">>> " . "
+system("npm i -g gulp");#\n";
 #и дать в консоли команду
 # надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
 #gulp
@@ -246,12 +286,14 @@ unless ($gulp_pid) {
 	# и дать в консоли команду
 	# надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
 	print "<gulp." . $gulp_pid . "> >>> " . "system(\"cd $full_path_to_root\")\n";
+	chdir $full_path_to_root;	
 	print "<gulp." . $gulp_pid . "> >>> " . "system(\"gulp\")\n";
+	print "<gulp." . $gulp_pid . ">" . `gulp`;	
 	#по окончании подать сигнал
-	#ctrl+’c’ просто прибить процесс по окончании основного процесса и всё... 
+	#ctrl+’c’ просто прибить процесс по окончании основного процесса и всё...  
 }
 # parent
-
+sleep(15);
 #скачать зависимости
 #./rebar get-deps
 print ">>> " . "system(\"./rebar get-deps\")\n";
@@ -259,12 +301,15 @@ print ">>> " . "system(\"./rebar get-deps\")\n";
 #./rebar compile
 print ">>> " . "system(\"./rebar compile\")\n";
 
-print ">>> " . "  *** DONE :) ***\n";
 # завершить проецсс с gulp'ом
 kill 0, $gulp_pid
 	or die "Cannot signal $gulp_pid whith SIGINT: $!";
 #запуск сервера
 #./init-dev.sh 
+
+print ">>> " . "  *** DONE :) ***\n";
+waitpid($gulp_pid, 0);
+
 
 #Если заменить в package.json:
 #"scripts": {
