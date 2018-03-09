@@ -3,7 +3,7 @@
 #** Подготовка среды для развёртывания сервиса
 #** ------------------------------------------------------------------
 # nam: CargoZavr project auto installer
-# vsn: 0.0.4
+# vsn: 0.0.6
 # dsc: Tries to install and prepare your env to use CargoZarv project automatically
 # crt: Пн мар  5 21:24:56 MSK 2018
 # upd:
@@ -20,33 +20,43 @@
 # 0.0.4 введены первые опции управления установкой
 # 0.0.5 реализована настройка процедуры развёртывания(не в полном объёме ещё)
 #				добавлен хелп
+# 0.0.6	добавлена обрабокта опци usage, version, instll
+#				реализованы условаия отображения предупреждения установки по умолчанию
+#				справочные сообщения на русском
 use warnings;
 use strict;
 use File::Basename qw(basename dirname);
 use File::Spec;
 use Getopt::Long;
 use autodie;
-# Обязатетельыне аргументы передаваемы при запуске
-# ?пароль root для sudo 
-# желаемый каталог в кторый склонируется проект, без HOME! либо прдётся чистить...
-# пользователь git
-# пароль для git
-# имя сервера
-# порт на котором будет дотупен сайт
-my $usage = q(Usage: 
-	cazavr --root-passwd=Rootpasswdr --cargo-root=project/cargo 
-	);
+
+my $usage = q(
+  Использование: cazavr {опция[=значение]}
+);
 
 my $default_config_warn = q(
+	ВНИМАНИЕ! Процедура установки запустится с 
+		  настройками по умалчанию!
 
-	WARNING! Installation is going to be started with 
-		 default configuration!
-	
-	For configuring the installation params, press ctrl+'c' 
-	and run the script with --help option for more details 
-	abuot how to exactly configure the installation script.
-
+	Если вы хотите настроить процедуру, передав желаемые
+	параметры для установки, нажмите комбинацию ctrl+'c' 
+	и заупустите 	программу с нужными опциями.
+	Если вы хотите ознакомиться со всеми опциями,
+	запустите программу с опцией --help для вызова
+	справки.
+	Если настройки по умлчанию вас устраивают,
+	подождите, установка сейчас начнётся...
 );
+# насколько жу это проще на английском блеать...
+#	WARNING! Installation is going to be started with 
+#		 default configuration!
+#	
+#	For configuring the installation params, press ctrl+'c' 
+#	and run the script with --help option for more details 
+#	abuot how to exactly configure the installation script.
+#	Or stay be waiting for to contine installation with defaults.
+#
+#);
 
 my $help = q(
 cazavr 1.2.25 (amd64)
@@ -84,9 +94,10 @@ cazavr — сервис автоматического развёртывани�
 В cazavr есть шарм старушки Шапокляк и равнодушие Сергея Шнурова.
 );
 
-warn $default_config_warn
-	if (2 > @ARGV);
-#sleep 40;
+my $version = q(
+cazavr v0.0.6
+);
+
 # получить аргументы командной строки
 my %options;
 GetOptions("no-git" => \$options{"no-git"},
@@ -95,6 +106,7 @@ GetOptions("no-git" => \$options{"no-git"},
 					 	"no-erlang" => \$options{"no-erlang"},
 					 	"no-nodejs" => \$options{"no-nodejs"},
 						"no-gulp" => \$options{"no-gulp"},
+						"install" => \$options{"install"},
 						"git-user=s" => \$options{"git-usr"},
 						"git-passwd=s" => \$options{"git-passwd"},
 						"root-passwd=s" => \$options{"root-passwd"},
@@ -112,21 +124,40 @@ GetOptions("no-git" => \$options{"no-git"},
 while ( my($key, $value) = each %options) {
 	#print "$key -> $value\n";
 }
-#die "stop";
+# есклю включена опция утановить и собрать проект
+# то сбросить флаги устанвоки программ окружения
+if ($options{"install"}) {
+	print ">>> " . "install selected, no-git no-erlang no-nginx no-gulp no-nodejs ENABLED!" . "\n";
+	$options{"no-git"} = 1;
+	$options{"no-nginx"} = 1;
+	$options{"no-erlang"} = 1;
+	$options{"no-gulp"} = 1;
+	$options{"no-nodejs"} = 1;
+}
+my @keys = keys %options;
+print "nargs >>> " . @keys . "\n";
+
 # показать справочное сообщение со скиском и описание доступных команд
-die "$help\n\n"
+die "$help"
 	if ($options{"help"});
+# показать короткую српавку по использованию команды
+die "$usage"
+	if ($options{"usage"});
+# показать версию
+die "$version"
+	if ($options{"version"});
+#die "stop";
 
 # понять кто я
 my $user = `whoami`;
 chomp $user;
-print ">>> user: " . $user . "\n";
+print ">>> " . "user: " . $user . "\n";
 # получить пароль суперпользвоателя для запуска sudo
 my $passwd = $options{"root-passwd"} || "111111111"; # defaut password :)
-print ">>> rootpassword: " . "$passwd" . "\n";
+print ">>> " . "root password: " . "$passwd" . "\n";
 # получить домашний каталог
 my $home_dir = $ENV{HOME};
-print ">>> home directory: " . $home_dir . "\n";
+print ">>> " . "home directory: " . $home_dir . "\n";
 # подготовить структуру каталогов?
 # каталог с шаблонами конфигов
 my $templates_dir = File::Spec->catfile(dirname($0), "templates");
@@ -135,12 +166,19 @@ print ">>> " . "templates: $templates_dir" . "\n";
 my $default_cargo_root = File::Spec->catfile("code", "cargo");
 # подготовить шаблоны файлов для замены, прям суда их запихнуть чтоб не терялись...
 my $cargo_root = $options{"cargo-root"} || $default_cargo_root;
+print ">>> " . "relative cargo root: " . $cargo_root . "\n";
 my $full_path_to_root = File::Spec->catfile($home_dir, $cargo_root);
-print ">>> " . "cargo root directory: " . $full_path_to_root . "\n";
+print ">>> " . "absolut cargo root: " . $full_path_to_root . "\n";
 my $port = $options{"server-port"} || "8000"; # default port
-print ">>> port:" . $port . "\n";
-print "\n\n\tIf you want to configure installation press ctrl+'c'\n\tor stay waiting for to continue installation with default params\n\n";
-sleep 20; # показать настройки пользователю
+print ">>> " . "cargo port:" . $port . "\n";
+# дать предупреждение если используются настройки по умолчанию и выдержать таймаут
+warn $default_config_warn
+	unless (defined($options{"cargo-root"}) 
+					or defined($options{"server-port"}) 
+					or defined($options{"root-passwd"}));
+sleep 40;
+#sleep 20; # показать настройки пользователю
+#die "stop";
 # Клон проекта через HTTP
 # тут надо проверить наличие гитика, если его нет то установить
 unless ($options{"no-git"}) {
@@ -148,8 +186,7 @@ unless ($options{"no-git"}) {
 	chomp $git_res;
 	print " * " . "$git_res" . "\n"
 		if ($git_res ne "");
-	#print ">>> 
-	system("echo $passwd | sudo -S apt-get install -y git")#\n"
+	system("echo $passwd | sudo -S apt-get install -y git")
 		if ($git_res eq "");
 	# проверить установку 
 	$git_res = `git --version`;
@@ -283,7 +320,6 @@ unless ($options{"no-nodejs"}) {
 	# проверям не установлена ли нода node -v
 	#вот тут срослось
 	#https://nodejs.org/en/download/package-manager/#debian-and-ubuntu-based-linux-distributions
-
 	#[opt] если его нету то надо поставить перед установкой
 	my $curl_res = `curl --version` || "";
 	chomp $curl_res;
@@ -296,7 +332,7 @@ unless ($options{"no-nodejs"}) {
 	chomp $curl_res;
 	print ">>> " . "[ ok ] curl is installed!\n"
 		if ($curl_res ne "");
-	# проверяем не установлена ли нода(кстати если установлена и не та, её надо бы снести и так со всем...)
+	#TODO: проверяем не установлена ли нода(кстати если установлена и не та, её надо бы снести и так со всем...)
 	my $node_res = `node -v` || "";
 	chomp $node_res;
 	print " * " . "node $node_res" . "\n"
@@ -357,6 +393,9 @@ unless ($options{"no-gulp"}) {
 	system("echo $passwd | sudo -S npm i -g gulp");
 }
 
+
+# TODO: надо бы проверять не зупущен ли gulp...
+# если не заупущен, то запускать
 # надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
 #по окончании подать сигнал
 #ctrl+’c’
