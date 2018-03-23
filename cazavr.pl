@@ -6,7 +6,7 @@
 # vsn: 0.0.6
 # dsc: Tries to install and prepare your env to use CargoZarv project automatically
 # crt: Пн мар  5 21:24:56 MSK 2018
-# upd: Ср мар 21 21:46:34 MSK 2018
+# upd: Пт мар 23 21:45:53 MSK 2018
 # ath: Michael DARIN, Moscow, Russia, (c) 2018
 # lic: gnu>=2, "AS-IS", "NO WARRENTY"
 # cnt: darin.m@tvzavr.ru
@@ -27,7 +27,9 @@
 #				начаты работы по добавлению шагов утановки(удаление пакетов, старых
 #					возможность доустановки postgresql и развёртываение БД cargo
 #					redis и emqtt брокера
-
+# 0.0.7 добавлена установка emqtt
+#				добавлен режим тихие игры(silent) 
+#				добалено изменение файла package.json
 use warnings;
 use strict;
 use File::Basename qw(basename dirname);
@@ -64,7 +66,7 @@ my $default_config_warn = q(
 #);
 
 my $help = q(
-cazavr 0.0.6 (amd64)
+cazavr 0.0.7 (amd64)
 Использование: cazavr {опция[=значение]}
 
 cazavr — сервис автоматического развёртывания проeкта cargo с 
@@ -87,7 +89,7 @@ cazavr — сервис автоматического развёртывани�
   install - установить и собрать проект без окружения
   help - показать это справочное сообщение
   verbose - максимально информативный вывод
-  silent - без лишних комментариев
+  silent - без лишних коментариев
   version - показать версию 
   usage - показать краткую справку по использованию
   log=Logfile - задать файл журнала регистрации хода установки
@@ -117,6 +119,9 @@ GetOptions("no-git" => \$options{"no-git"},
 					 	"no-erlang" => \$options{"no-erlang"},
 					 	"no-nodejs" => \$options{"no-nodejs"},
 						"no-gulp" => \$options{"no-gulp"},
+						"no-emqtt" => \$options{"no-emqtt"},
+						"no-postgresql" => \$options{"no-postgresql"},
+						"no-redis" => \$options{"no-redis"},
 						"install" => \$options{"install"},
 						"git-user=s" => \$options{"git-usr"},
 						"git-passwd=s" => \$options{"git-passwd"},
@@ -127,6 +132,7 @@ GetOptions("no-git" => \$options{"no-git"},
 						"help" => \$options{"help"},
 						"usage" => \$options{"usage"},
 						"version" => \$options{"version"},
+						"silent" => \$options{"silent"},
 						"verbose" => \$options{"verbose"},
            	"outfile=s" => \$options{"outfile"}
           )
@@ -147,16 +153,25 @@ if ($options{"install"}) {
 }
 my @keys = keys %options;
 
+
+
 # показать справочное сообщение со скиском и описание доступных команд
-die "$help"
+die "$0:$help"
 	if ($options{"help"});
 # показать короткую српавку по использованию команды
-die "$usage"
+die "$0:$usage"
 	if ($options{"usage"});
 # показать версию
-die "$version"
+die "$0:$version"
 	if ($options{"version"});
 #die "stop";
+
+# режим вывода(vervose by default)
+my $output_mode = "";
+# устанвить режим тихой устанвоки
+$output_mode = " 2>&1 1>/dev/zero"
+	if ($options{"silent"});
+#TODO(darin-m): добвить вывод в лог и т.п.
 
 # понять кто я
 my $user = `whoami`;
@@ -221,7 +236,8 @@ unless ($options{"no-clone"}) {
 	#должно получиться так
 	#/paht/to/project/rootdir/cargo/boss.conf
 	print ">>> " . "generating boss.config file...\n";
-	# открыть файл шаблона boss.config на ввод
+	# открыть файл шаблона boss.config на в
+#TODO(darin-m): добвить вывод в лог и т.п.вод
 	my $boss_conf_tpl_fname = File::Spec->catfile($templates_dir, "boss.config.tpl");
 	open FIN, "<$boss_conf_tpl_fname"
 		or die "$0:Cannot open $boss_conf_tpl_fname:$!";
@@ -252,7 +268,7 @@ unless ($options{"no-nginx"}) {
 	print " * " . "$nginx_res". "\n"
 		if ($nginx_res ne "");
 	# даём команду на установку
-	system("echo $passwd | sudo -S apt-get install -y nginx")
+	system("echo $passwd | sudo -S apt-get install -y nginx $output_mode")
 		if ($nginx_res eq "");
 	# проверить устанвоку
 	$nginx_res =  `nginx -v 2>&1` || "";
@@ -317,10 +333,10 @@ unless ($options{"no-nginx"}) {
 	} <FIN>;
 	#закрыть файл шаблона
 	close FIN
-		or die "Cannot close $cargo_conf_tpl_fname:$!";
+		or die "$0:Cannot close $cargo_conf_tpl_fname:$!";
 	#закрыть файл конфига
 	close FOUT
-		or die "Cannot close $cargo_conf_target_fname:$!";
+		or die "$0:Cannot close $cargo_conf_target_fname:$!";
 	#перемесить сгенерированный кофиг в каталог /etc/nginx
 	system("echo $passwd | sudo -S mv $cargo_conf_target_fname /etc/nginx/conf.d");
 	#nginx надо запустить или перезапустить
@@ -342,7 +358,7 @@ unless ($options{"no-nodejs"}) {
 	chomp $curl_res;
 	print " * " . "$curl_res" . "\n"
 		if ($curl_res ne "");
-	system("echo $passwd | sudo -S apt-get install -y curl")#\n"
+	system("echo $passwd | sudo -S apt-get install -y curl $output_mode")
 		if ($curl_res eq "");
 	# проверим установку
 	$curl_res = `curl --version` || "";
@@ -362,9 +378,9 @@ unless ($options{"no-nodejs"}) {
 	if ($node_res eq "") {
 		# подготовим пакет нужной версии (сейчас на март 2018 это версия 8 для ноды
 		#curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
-		system("echo $passwd | sudo -S curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -");
+		system("echo $passwd | sudo -S curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash - $output_mode");
 		# установим саму ноду
-		system("echo $passwd | sudo -S apt-get install -y nodejs");
+		system("echo $passwd | sudo -S apt-get install -y nodejs $output_mode");
 	}
 	$node_res = `node -v` || "";
 	chomp $node_res;
@@ -383,13 +399,41 @@ unless ($options{"no-erlang"}) {
 	#To add Erlang Solutions repository (including our public key for apt-secure) 
 	#to your system, call the following commandsi and install esl-erlang
 	chdir "/tmp";
-	system("wget https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb");
-	system("echo $passwd | sudo -S dpkg -i erlang-solutions_1.0_all.deb");
-	system("echo $passwd | sudo -S apt-get update");
-	system("echo $passwd | sudo -S apt-get install -y esl-erlang");
+	system("wget https://packages.erlang-solutions.com/erlang-solutions_1.0_all.deb $output_mode");
+	system("echo $passwd | sudo -S dpkg -i erlang-solutions_1.0_all.deb $output_mode");
+	system("echo $passwd | sudo -S apt-get update $output_mode");
+	system("echo $passwd | sudo -S apt-get install -y esl-erlang $output_mode");
 	unlink "erlang-solutions_1.0_all.deb"
-		or warn "Cannot delete erlang-solutions_1.0_all.deb:$!";
+		or warn "$0:Cannot delete erlang-solutions_1.0_all.deb:$!";
 	chdir "$full_path_to_root";
+}
+
+unless ($options{"no-emqtt"}) {
+	#TODO:emqtt install and config
+	#Сборка emqtt c github:
+	chdir "/tmp";
+  system("git clone https://github.com/emqtt/emq-relx.git $output_mode");
+	chdir "/tmp/emq-relx";
+	system("make $output_mode");
+	# make install может он там есть?
+	# запуск в ручную
+  #cd _rel/emqttd
+	#./bin/emqttd console
+	# удадалить исходники полсле устанвоки
+	system ("rm -rf /tmp/emq-relx");
+	# вернуться в рабочий каталог
+	chdir "$full_path_to_root";
+}
+
+
+unless ($options{"no-redis"}) {
+	#TODO: redis install and config
+	print ">>> " . "[WARN] Redis installation is not implemented yet!" . "\n";
+}
+
+unless ($options{"no-postgresql"}) {
+	#TODO: postgresql install, config and land cargo db
+	print ">>> " . "[WARN] PostgreSQL installation is not implemented yet!" . "\n";
 }
 
 # Сборка и подготовка к пуску
@@ -397,7 +441,10 @@ unless ($options{"no-erlang"}) {
 #cd /paht/to/project/rootdir/cargo
 chdir $full_path_to_root;
 #и последовательно выполнить команды
-system("npm install");
+print ">>> " . "installing..." . "\n";
+system("npm install $output_mode");
+print ">>> " . "building..." . "\n";
+system("npm run build $output_mode");
 
 unless ($options{"no-gulp"}) {
 	#установить gulp, дав следующую команду
@@ -407,7 +454,7 @@ unless ($options{"no-gulp"}) {
 	print " * " . "$gulp_res" . "\n"
 		if ($gulp_res ne "");
 	# его скорей всего не будет, поэтому 
-	system("echo $passwd | sudo -S npm i -g gulp");
+	system("echo $passwd | sudo -S npm i -g gulp $output_mode");
 }
 
 
@@ -417,35 +464,32 @@ unless ($options{"no-gulp"}) {
 #по окончании подать сигнал
 #ctrl+’c’
 # процесс и так отомрёт..
+print ">>> " . "starting gulp in detached process..." . "\n";
 defined (my $gulp_pid = fork) 
-	or die "Cannot fork: $!";
+	or die "$0:Cannot fork: $!";
 unless ($gulp_pid) {
 	# и дать в консоли команду
 	# надо ли её двать, если надо то можно её в bg дать или ваще форкнуть в процесс отдельный...
-	print "<gulp." . $gulp_pid . "> >>> " . "system(\"cd $full_path_to_root\")\n";
+	#print "<gulp." . $gulp_pid . "> >>> " . "system(\"cd $full_path_to_root\")\n";
 	chdir $full_path_to_root;	
-	print "<gulp." . $gulp_pid . "> >>> " . "system(\"gulp\")\n";
+	#print "<gulp." . $gulp_pid . "> >>> " . "system(\"gulp\")\n";
 	exec("gulp");	
 	#по окончании подать сигнал
 	#ctrl+’c’ просто прибить процесс по окончании основногkkkjо процесса и всё...  
 }
+
 #скачать зависимости
-system("./rebar get-deps");
+print ">>> " . "gethering deps..." . "\n";
+system("./rebar get-deps $output_mode");
 #скомпилировать зависимости
-#./rebar compile
-#print ">>> " . "
-system("./rebar compile");#\n";
+print ">>> " . "compiling..." . "\n";
+system("./rebar compile $output_mode");
 
 # завершить проецсс с gulp'ом
 # хотя это бессмысленно...
-kill 0, $gulp_pid
-	or die "Cannot signal $gulp_pid whith SIGINT: $!";
+#kill 0, $gulp_pid
+#	or die "Cannot signal $gulp_pid whith SIGINT: $!";
 
-print ">>> " . "  *** DONE :) ***\n";
-print "\n\n\t Start the server by ./init-dev command\n\t\tor nmp run start(in progress:))\n\n\n";
-#waitpid($gulp_pid, 0);
-
-#TODO: надо это вмотраживать при установке тоже
 #Если заменить в package.json:
 #"scripts": {
 #    "test": "echo \"Error: no test specified\" && exit 1",
@@ -453,3 +497,37 @@ print "\n\n\t Start the server by ./init-dev command\n\t\tor nmp run start(in pr
 #  },
 #то запуск через команду
 #npm run start
+# открыть файл pacage.json
+print ">>> " . "modifieng package.json -> \"start\": \"./init-dev.sh\" added\n";
+	my $package_json_fname = File::Spec->catfile($full_path_to_root, "package.json");
+	open FIN, "<$package_json_fname"
+		or die "$0:Cannot open $package_json_fname:$!";
+	#открыть новый файл с добавленной строкой для запуска
+	my $package_json_new_fname = File::Spec->catfile($full_path_to_root, "package.json.new");
+	open FOUT, ">$package_json_new_fname"
+		or die "$0:Cannot open $package_json_new_fname:$!";
+	#прогнать через преобразователь
+	map { chomp;
+		# TODO: здесь вставить правила преобразования
+		if (m/(\s*)(\"test\")[^:]*(:)\s*(.+)/) {
+			print FOUT "$1$2$3$4,\n";
+			print FOUT "$1\"start\": \"./init-dev.sh\"\n";
+		} else {
+			print FOUT "$_\n";
+		}
+	} <FIN>;
+	#закрыть файл шаблона
+	close FIN
+		or die "$0:Cannot close $package_json_fname:$!";
+	#закрыть файл конфига
+	close FOUT
+		or die "$0:Cannot close $package_json_new_fname:$!";
+# заменить файлы
+unlink "$package_json_fname";
+system "mv $package_json_new_fname $package_json_fname";
+
+print ">>> " . "  *** DONE :) ***\n";
+print "\n\n\t Start the server by ./init-dev command\n\t\tor npm run star command.\n\n\n";
+#waitpid($gulp_pid, 0);
+
+
